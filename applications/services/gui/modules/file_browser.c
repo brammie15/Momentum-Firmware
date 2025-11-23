@@ -659,6 +659,15 @@ static void file_browser_view_draw_callback(Canvas* canvas, void* _model) {
     }
 }
 
+static char get_first_letter(BrowserItem_t* item) {
+    if(!item) return 0;
+    const char* name = furi_string_get_cstr(item->display_name);
+    if(!name || name[0] == '\0') return 0;
+    char c = name[0];
+    if(c >= 'a' && c <= 'z') c -= 32; // Uppercase normalize
+    return c;
+}
+
 static bool file_browser_view_input_callback(InputEvent* event, void* context) {
     FileBrowser* browser = context;
     furi_check(browser);
@@ -802,29 +811,79 @@ static bool file_browser_view_input_callback(InputEvent* event, void* context) {
             consumed = true;
         }
     } else if(event->key == InputKeyRight) {
-        if(event->type == InputTypeShort && browser->select_right) {
-            BrowserItem_t* selected_item = NULL;
-            with_view_model(
-                browser->view,
-                FileBrowserModel * model,
-                {
-                    if(browser_is_item_in_array(model, model->item_idx)) {
-                        selected_item =
-                            items_array_get(model->items, model->item_idx - model->array_offset);
-                    }
-                },
-                false);
+        if(event->type == InputTypeShort) {
+            if(browser->select_right) {
+                BrowserItem_t* selected_item = NULL;
+                with_view_model(
+                    browser->view,
+                    FileBrowserModel * model,
+                    {
+                        if(browser_is_item_in_array(model, model->item_idx)) {
+                            selected_item = items_array_get(
+                                model->items, model->item_idx - model->array_offset);
+                        }
+                    },
+                    false);
 
-            if(selected_item) {
-                if(selected_item->type == BrowserItemTypeFile ||
-                   selected_item->type == BrowserItemTypeFolder) {
-                    furi_string_set(browser->result_path, selected_item->path);
-                    if(browser->callback) {
-                        browser->callback(browser->context);
+                if(selected_item) {
+                    if(selected_item->type == BrowserItemTypeFile ||
+                       selected_item->type == BrowserItemTypeFolder) {
+                        furi_string_set(browser->result_path, selected_item->path);
+                        if(browser->callback) {
+                            browser->callback(browser->context);
+                        }
                     }
                 }
+                consumed = true;
+            } else {
+                with_view_model(
+                    browser->view,
+                    FileBrowserModel * model,
+                    {
+                        int32_t start = model->item_idx;
+                        char current = 0;
+                        bool moved = false;
+
+                        if(browser_is_item_in_array(model, start)) {
+                            BrowserItem_t* item =
+                                items_array_get(model->items, start - model->array_offset);
+                            current = get_first_letter(item);
+                        }
+
+                        for(int32_t i = start + 1; i < (int32_t)model->item_cnt; i++) {
+                            if(browser_is_item_in_array(model, i)) {
+                                BrowserItem_t* it =
+                                    items_array_get(model->items, i - model->array_offset);
+                                char c = get_first_letter(it);
+
+                                if(c > current) {
+                                    model->item_idx = i;
+                                    moved = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if(!moved) {
+                            for(int32_t i = 0; i < (int32_t)model->item_cnt; i++) {
+                                if(browser_is_item_in_array(model, i)) {
+                                    BrowserItem_t* it =
+                                        items_array_get(model->items, i - model->array_offset);
+                                    char c = get_first_letter(it);
+
+                                    if(c >= 'A') {
+                                        model->item_idx = i;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    true);
+
+                browser_update_offset(browser);
+                consumed = true;
             }
-            consumed = true;
         }
     } else if(event->key == InputKeyLeft) {
         if(event->type == InputTypeShort) {
