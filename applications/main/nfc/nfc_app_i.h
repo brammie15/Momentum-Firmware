@@ -113,6 +113,9 @@ typedef struct {
     uint16_t nested_target_key;
     uint16_t msb_count;
     bool enhanced_dict;
+    uint16_t current_key_idx; // Current key index for CUID dictionary mode
+    uint8_t*
+        cuid_key_indices_bitmap; // Bitmap of key indices present in CUID dictionary (256 bits = 32 bytes)
 } NfcMfClassicDictAttackContext;
 
 typedef struct {
@@ -122,6 +125,18 @@ typedef struct {
     size_t dict_keys_total;
     size_t dict_keys_current;
 } NfcMfUltralightCDictContext;
+
+typedef enum {
+    NfcMfUltralightCWriteDictIdle, /**< No dict open; safe to open either dict. */
+    NfcMfUltralightCWriteDictUser, /**< User dict currently open. */
+    NfcMfUltralightCWriteDictSystem, /**< System dict currently open. */
+    NfcMfUltralightCWriteDictExhausted, /**< All dicts tried; do not re-open. */
+} NfcMfUltralightCWriteDictState;
+
+typedef struct {
+    bool copy_key; /**< True = overwrite target 3DES key with source key pages. */
+    NfcMfUltralightCWriteDictState dict_state; /**< Which dict is open for write-phase auth. */
+} NfcMfUltralightCWriteContext;
 
 struct NfcApp {
     DialogsApp* dialogs;
@@ -162,6 +177,7 @@ struct NfcApp {
     SlixUnlock* slix_unlock;
     NfcMfClassicDictAttackContext nfc_dict_context;
     NfcMfUltralightCDictContext mf_ultralight_c_dict_context;
+    NfcMfUltralightCWriteContext mf_ultralight_c_write_context;
     Mfkey32Logger* mfkey32_logger;
     MfUserDict* mf_user_dict;
     MfClassicKeyCache* mfc_key_cache;
